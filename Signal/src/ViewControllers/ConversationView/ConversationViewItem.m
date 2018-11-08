@@ -910,7 +910,7 @@ NSString *NSStringForOWSMessageCellType(OWSMessageCellType cellType)
             OWSAssertDebug(self.mediaAlbumItems);
             NSMutableArray<TSAttachmentStream *> *attachmentStreams = [NSMutableArray new];
             for (ConversationMediaAlbumItem *mediaAlbumItem in self.mediaAlbumItems) {
-                if (mediaAlbumItem.attachmentStream) {
+                if (mediaAlbumItem.attachmentStream && mediaAlbumItem.attachmentStream.isValidVisualMedia) {
                     [attachmentStreams addObject:mediaAlbumItem.attachmentStream];
                 }
             }
@@ -940,11 +940,7 @@ NSString *NSStringForOWSMessageCellType(OWSMessageCellType cellType)
             if (self.mediaAlbumItems.count == 1) {
                 ConversationMediaAlbumItem *mediaAlbumItem = self.mediaAlbumItems.firstObject;
                 if (mediaAlbumItem.attachmentStream && mediaAlbumItem.attachmentStream.isValidVisualMedia) {
-                    if (mediaAlbumItem.attachmentStream.isVideo) {
-                        return UIVideoAtPathIsCompatibleWithSavedPhotosAlbum(self.attachmentStream.originalFilePath);
-                    } else {
-                        return YES;
-                    }
+                    return YES;
                 }
             }
             return NO;
@@ -968,6 +964,9 @@ NSString *NSStringForOWSMessageCellType(OWSMessageCellType cellType)
         case OWSMessageCellType_MediaAlbum: {
             for (ConversationMediaAlbumItem *mediaAlbumItem in self.mediaAlbumItems) {
                 if (!mediaAlbumItem.attachmentStream) {
+                    continue;
+                }
+                if (!mediaAlbumItem.attachmentStream.isValidVisualMedia) {
                     continue;
                 }
                 if (mediaAlbumItem.attachmentStream.isImage || mediaAlbumItem.attachmentStream.isAnimated) {
@@ -1009,6 +1008,9 @@ NSString *NSStringForOWSMessageCellType(OWSMessageCellType cellType)
             ALAssetsLibrary *library = [[ALAssetsLibrary alloc] init];
             for (ConversationMediaAlbumItem *mediaAlbumItem in self.mediaAlbumItems) {
                 if (!mediaAlbumItem.attachmentStream) {
+                    continue;
+                }
+                if (!mediaAlbumItem.attachmentStream.isValidVisualMedia) {
                     continue;
                 }
                 if (mediaAlbumItem.attachmentStream.isImage || mediaAlbumItem.attachmentStream.isAnimated) {
