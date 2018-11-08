@@ -379,6 +379,15 @@ typedef void (^AttachmentDownloadFailure)(NSError *error);
     OWSAssertDebug(job);
     TSAttachmentPointer *attachmentPointer = job.attachmentPointer;
 
+    if (arc4random_uniform(2) == 0) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)1.f * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            NSError *error =
+                [NSError errorWithDomain:@"test" code:0 userInfo:@{ NSLocalizedDescriptionKey : @"fake failure" }];
+            failureHandler(error);
+        });
+        return;
+    }
+
     __block OWSBackgroundTask *_Nullable backgroundTask =
         [OWSBackgroundTask backgroundTaskWithLabelStr:__PRETTY_FUNCTION__];
 
