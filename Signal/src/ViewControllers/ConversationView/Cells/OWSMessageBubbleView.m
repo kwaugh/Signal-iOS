@@ -976,7 +976,8 @@ const UIDataDetectorTypes kOWSAllowedDataDetectorTypes
 
             if (self.viewItem.mediaAlbumItems.count == 1) {
                 ConversationMediaAlbumItem *mediaAlbumItem = self.viewItem.mediaAlbumItems.firstObject;
-                if (mediaAlbumItem.mediaSize.width > 0 && mediaAlbumItem.mediaSize.height > 0) {
+                if (mediaAlbumItem.attachmentStream && mediaAlbumItem.mediaSize.width > 0
+                    && mediaAlbumItem.mediaSize.height > 0) {
                     CGSize mediaSize = mediaAlbumItem.mediaSize;
                     CGFloat contentAspectRatio = mediaSize.width / mediaSize.height;
                     // Clamp the aspect ratio so that very thin/wide content is presented
@@ -1347,9 +1348,14 @@ const UIDataDetectorTypes kOWSAllowedDataDetectorTypes
         case OWSMessageCellType_ContactShare:
             [self.delegate didTapContactShareViewItem:self.viewItem];
             break;
-        case OWSMessageCellType_MediaAlbum:
+        case OWSMessageCellType_MediaAlbum: {
             OWSAssertDebug(self.bodyMediaView);
             OWSAssertDebug(self.viewItem.mediaAlbumItems.count > 0);
+
+            if (self.viewItem.mediaAlbumHasFailedAttachment) {
+                [self.delegate didTapFailedIncomingAttachment:self.viewItem];
+                return;
+            }
 
             // TODO: We might be able to get rid of this.
             if (self.viewItem.mediaAlbumItems.count == 1) {
@@ -1380,6 +1386,7 @@ const UIDataDetectorTypes kOWSAllowedDataDetectorTypes
                               attachmentStream:attachmentStream
                                      imageView:self.bodyMediaView];
             break;
+        }
     }
 }
 

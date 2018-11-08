@@ -142,6 +142,8 @@ NSString *NSStringForOWSMessageCellType(OWSMessageCellType cellType);
 
 - (nullable TSAttachmentStream *)firstValidAlbumAttachment;
 
+- (BOOL)mediaAlbumHasFailedAttachment;
+
 @end
 
 #pragma mark -
