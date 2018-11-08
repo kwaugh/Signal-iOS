@@ -60,17 +60,6 @@ static const CGFloat kAttachmentUploadProgressTheta = 0.001f;
 
 - (void)run
 {
-    if (arc4random_uniform(2) == 0) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)1.f * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            NSError *error =
-                [NSError errorWithDomain:@"test" code:0 userInfo:@{ NSLocalizedDescriptionKey : @"fake failure" }];
-            // Not finding local attachment is a terminal failure.
-            error.isRetryable = NO;
-            [self reportError:error];
-        });
-        return;
-    }
-
     __block TSAttachmentStream *attachmentStream;
     [self.dbConnection readWithBlock:^(YapDatabaseReadTransaction *_Nonnull transaction) {
         attachmentStream = [TSAttachmentStream fetchObjectWithUniqueID:self.attachmentId transaction:transaction];
