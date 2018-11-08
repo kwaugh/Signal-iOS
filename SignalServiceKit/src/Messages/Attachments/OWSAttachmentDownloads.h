@@ -9,40 +9,12 @@ extern NSString *const kAttachmentDownloadProgressKey;
 extern NSString *const kAttachmentDownloadAttachmentIDKey;
 
 @class SSKProtoAttachmentPointer;
+@class TSAttachment;
 @class TSAttachmentPointer;
 @class TSAttachmentStream;
 @class TSMessage;
-@class TSThread;
+@class YapDatabaseReadTransaction;
 @class YapDatabaseReadWriteTransaction;
-
-//@interface OWSAttachmentDownload : NSObject
-//
-//@property (nonatomic, readonly) NSArray<NSString *> *attachmentIds;
-//@property (nonatomic, readonly) NSArray<TSAttachmentPointer *> *attachmentPointers;
-//@property (nonatomic, readonly) BOOL hasSupportedAttachments;
-//
-//- (instancetype)init NS_UNAVAILABLE;
-//
-////- (instancetype)initWithAttachmentProtos:(NSArray<SSKProtoAttachmentPointer *> *)attachmentProtos
-////                          networkManager:(TSNetworkManager *)networkManager
-////                             transaction:(YapDatabaseReadWriteTransaction *)transaction NS_DESIGNATED_INITIALIZER;
-////
-/////*
-//// * Retry fetching failed attachment download
-//// */
-////- (instancetype)initWithAttachmentPointer:(TSAttachmentPointer *)attachmentPointer
-////                           networkManager:(TSNetworkManager *)networkManager NS_DESIGNATED_INITIALIZER;
-////
-////- (void)fetchAttachmentsForMessage:(nullable TSMessage *)message
-////                    primaryStorage:(OWSPrimaryStorage *)primaryStorage
-////                           success:(void (^)(NSArray<TSAttachmentStream *> *attachmentStreams))successHandler
-////                           failure:(void (^)(NSError *error))failureHandler;
-////- (void)fetchAttachmentsForMessage:(nullable TSMessage *)message
-////                       transaction:(YapDatabaseReadWriteTransaction *)transaction
-////                           success:(void (^)(NSArray<TSAttachmentStream *> *attachmentStreams))successHandler
-////                           failure:(void (^)(NSError *error))failureHandler;
-//
-//@end
 
 #pragma mark -
 
@@ -52,44 +24,20 @@ extern NSString *const kAttachmentDownloadAttachmentIDKey;
  */
 @interface OWSAttachmentDownloads : NSObject
 
-- (NSArray<NSString *> *)saveAttachmentsPointersForMessage:(TSMessage *)message
-                                          attachmentProtos:(NSArray<SSKProtoAttachmentPointer *> *)attachmentProtos
-                                               transaction:(YapDatabaseReadWriteTransaction *)transaction;
+- (NSArray<NSString *> *)attachmentsIdsForAttachments:(NSArray<TSAttachment *> *)attachments;
 
-//@property (nonatomic, readonly) NSArray<NSString *> *attachmentIds;
-//@property (nonatomic, readonly) NSArray<TSAttachmentPointer *> *attachmentPointers;
-//@property (nonatomic, readonly) BOOL hasSupportedAttachments;
-
-//- (instancetype)init NS_UNAVAILABLE;
-
-//- (instancetype)initWithAttachmentProtos:(NSArray<SSKProtoAttachmentPointer *> *)attachmentProtos
-//                             transaction:(YapDatabaseReadWriteTransaction *)transaction NS_DESIGNATED_INITIALIZER;
-//
-///*
-// * Retry fetching failed attachment download
-// */
-//- (instancetype)initWithAttachmentPointer:(TSAttachmentPointer *)attachmentPointer
-//                           networkManager:(TSNetworkManager *)networkManager NS_DESIGNATED_INITIALIZER;
+- (NSArray<TSAttachmentPointer *> *)
+    saveAttachmentPointersForAttachmentProtos:(NSArray<SSKProtoAttachmentPointer *> *)attachmentProtos
+                                  transaction:(YapDatabaseReadWriteTransaction *)transaction;
 
 - (void)downloadAttachmentsForMessage:(TSMessage *)message
-                          transaction:(YapDatabaseReadWriteTransaction *)transaction
-                              success:(void (^)(NSArray<TSAttachmentStream *> *attachmentStreams))successHandler
-                              failure:(void (^)(NSError *error))failureHandler;
+                          transaction:(YapDatabaseReadTransaction *)transaction
+                              success:(void (^)(NSArray<TSAttachmentStream *> *attachmentStreams))success
+                              failure:(void (^)(NSError *error))failure;
 
-//- (void)fetchAttachmentsForMessage:(nullable TSMessage *)message
-//                    primaryStorage:(OWSPrimaryStorage *)primaryStorage
-//                           success:(void (^)(NSArray<TSAttachmentStream *> *attachmentStreams))successHandler
-//                           failure:(void (^)(NSError *error))failureHandler;
-//- (void)fetchAttachmentsForMessage:(nullable TSMessage *)message
-//                       transaction:(YapDatabaseReadWriteTransaction *)transaction
-//                           success:(void (^)(NSArray<TSAttachmentStream *> *attachmentStreams))successHandler
-//                           failure:(void (^)(NSError *error))failureHandler;
-//
-//- (OWSAttachmentDownload *)fetchAttachmentsForMessage:(TSMessage *)message
-//                                          transaction:(YapDatabaseReadWriteTransaction *)transaction
-//                                              success:(void (^)(NSArray<TSAttachmentStream *>
-//                                              *attachmentStreams))successHandler failure:(void (^)(NSError
-//                                              *error))failureHandler;
+- (void)downloadAttachmentPointer:(TSAttachmentPointer *)attachmentPointer
+                          success:(void (^)(NSArray<TSAttachmentStream *> *attachmentStreams))success
+                          failure:(void (^)(NSError *error))failure;
 
 @end
 

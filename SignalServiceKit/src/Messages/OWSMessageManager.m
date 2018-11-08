@@ -9,7 +9,7 @@
 #import "MimeTypeUtil.h"
 #import "NSNotificationCenter+OWS.h"
 #import "NotificationsProtocol.h"
-#import "OWSAttachmentsProcessor.h"
+#import "OWSAttachmentDownloads.h"
 #import "OWSBlockingManager.h"
 #import "OWSCallMessageHandler.h"
 #import "OWSContact.h"
@@ -162,6 +162,11 @@ NS_ASSUME_NONNULL_BEGIN
 - (id<OWSTypingIndicators>)typingIndicators
 {
     return SSKEnvironment.shared.typingIndicators;
+}
+
+- (OWSAttachmentDownloads *)attachmentDownloads
+{
+    return SSKEnvironment.shared.attachmentDownloads;
 }
 
 #pragma mark -
@@ -729,17 +734,17 @@ NS_ASSUME_NONNULL_BEGIN
         return;
     }
 
-    OWSAttachmentsProcessor *attachmentsProcessor =
-        [[OWSAttachmentsProcessor alloc] initWithAttachmentProtos:@[ dataMessage.group.avatar ]
-                                                   networkManager:self.networkManager
-                                                      transaction:transaction];
-
-    if (!attachmentsProcessor.hasSupportedAttachments) {
+    NSArray<TSAttachmentPointer *> *attachmentPointers =
+        [self.attachmentDownloads saveAttachmentPointersForAttachmentProtos:@[
+            dataMessage.group.avatar,
+        ]
+                                                                transaction:transaction];
+    if (attachmentPointers.count < 1) {
         OWSLogWarn(@"received unsupported group avatar envelope");
         return;
     }
-    [attachmentsProcessor fetchAttachmentsForMessage:nil
-        transaction:transaction
+    OWSAssertDebug(attachmentPointers.count == 1);
+    [self.attachmentDownloads downloadAttachmentPointer:attachmentPointers.firstObject
         success:^(NSArray<TSAttachmentStream *> *attachmentStreams) {
             OWSAssertDebug(attachmentStreams.count == 1);
             TSAttachmentStream *attachmentStream = attachmentStreams.firstObject;
@@ -775,35 +780,35 @@ NS_ASSUME_NONNULL_BEGIN
         return;
     }
 
-    OWSAttachmentsProcessor *attachmentsProcessor =
-        [[OWSAttachmentsProcessor alloc] initWithAttachmentProtos:dataMessage.attachments
-                                                   networkManager:self.networkManager
-                                                      transaction:transaction];
-    if (!attachmentsProcessor.hasSupportedAttachments) {
+    NSArray<TSAttachmentPointer *> *attachmentPointers =
+        [self.attachmentDownloads saveAttachmentPointersForAttachmentProtos:dataMessage.attachments
+                                                                transaction:transaction];
+    NSArray<NSString *> *attachmentIds = [self.attachmentDownloads attachmentsIdsForAttachments:attachmentPointers];
+    if (attachmentIds.count < 1) {
         OWSLogWarn(@"received unsupported media envelope");
         return;
     }
 
-    TSIncomingMessage *_Nullable createdMessage = [self handleReceivedEnvelope:envelope
-                                                               withDataMessage:dataMessage
-                                                                 attachmentIds:attachmentsProcessor.attachmentIds
-                                                                   transaction:transaction];
+    TSIncomingMessage *_Nullable message = [self handleReceivedEnvelope:envelope
+                                                        withDataMessage:dataMessage
+                                                          attachmentIds:attachmentIds
+                                                            transaction:transaction];
 
-    if (!createdMessage) {
+    if (!message) {
         return;
     }
 
-    OWSLogDebug(@"incoming attachment message: %@", createdMessage.debugDescription);
+    OWSLogDebug(@"incoming attachment message: %@", message.debugDescription);
 
-    [attachmentsProcessor fetchAttachmentsForMessage:createdMessage
+    [self.attachmentDownloads downloadAttachmentsForMessage:message
         transaction:transaction
         success:^(NSArray<TSAttachmentStream *> *attachmentStreams) {
             OWSLogDebug(@"successfully fetched attachments: %lu for message: %@",
                 (unsigned long)attachmentStreams.count,
-                createdMessage);
+                message);
         }
         failure:^(NSError *error) {
-            OWSLogError(@"failed to fetch attachments for message: %@ with error: %@", createdMessage, error);
+            OWSLogError(@"failed to fetch attachments for message: %@ with error: %@", message, error);
         }];
 }
 
@@ -1362,17 +1367,12 @@ NS_ASSUME_NONNULL_BEGIN
                                              transaction:transaction];
 
         if ([attachmentPointer isKindOfClass:[TSAttachmentPointer class]]) {
-            OWSAttachmentsProcessor *attachmentProcessor =
-                [[OWSAttachmentsProcessor alloc] initWithAttachmentPointer:attachmentPointer
-                                                            networkManager:self.networkManager];
-
             OWSLogDebug(@"downloading thumbnail for message: %lu", (unsigned long)incomingMessage.timestamp);
-            [attachmentProcessor fetchAttachmentsForMessage:incomingMessage
-                transaction:transaction
+            [self.attachmentDownloads downloadAttachmentPointer:attachmentPointer
                 success:^(NSArray<TSAttachmentStream *> *attachmentStreams) {
                     OWSAssertDebug(attachmentStreams.count == 1);
                     TSAttachmentStream *attachmentStream = attachmentStreams.firstObject;
-                    [self.dbConnection asyncReadWriteWithBlock:^(YapDatabaseReadWriteTransaction *transaction) {
+                    [self.dbConnection readWriteWithBlock:^(YapDatabaseReadWriteTransaction *transaction) {
                         [incomingMessage setQuotedMessageThumbnailAttachmentStream:attachmentStream];
                         [incomingMessage saveWithTransaction:transaction];
                     }];
@@ -1393,15 +1393,11 @@ NS_ASSUME_NONNULL_BEGIN
         if (![attachmentPointer isKindOfClass:[TSAttachmentPointer class]]) {
             OWSFailDebug(@"avatar attachmentPointer was unexpectedly nil");
         } else {
-            OWSAttachmentsProcessor *attachmentProcessor =
-                [[OWSAttachmentsProcessor alloc] initWithAttachmentPointer:attachmentPointer
-                                                            networkManager:self.networkManager];
-
             OWSLogDebug(@"downloading contact avatar for message: %lu", (unsigned long)incomingMessage.timestamp);
-            [attachmentProcessor fetchAttachmentsForMessage:incomingMessage
-                transaction:transaction
+
+            [self.attachmentDownloads downloadAttachmentPointer:attachmentPointer
                 success:^(NSArray<TSAttachmentStream *> *attachmentStreams) {
-                    [self.dbConnection asyncReadWriteWithBlock:^(YapDatabaseReadWriteTransaction *transaction) {
+                    [self.dbConnection readWriteWithBlock:^(YapDatabaseReadWriteTransaction *transaction) {
                         [incomingMessage touchWithTransaction:transaction];
                     }];
                 }

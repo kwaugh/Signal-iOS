@@ -115,64 +115,26 @@ typedef void (^AttachmentDownloadFailure)(NSError *error);
     return self;
 }
 
-//- (instancetype)initWithAttachmentPointer:(TSAttachmentPointer *)attachmentPointer
-//                           networkManager:(TSNetworkManager *)networkManager
-//{
-//    self = [super init];
-//    if (!self) {
-//        return self;
-//    }
-//
-//    _networkManager = networkManager;
-//
-//    _attachmentPointers = @[ attachmentPointer ];
-//    _attachmentIds = @[ attachmentPointer.uniqueId ];
-//
-//    return self;
-//}
-//
-//- (instancetype)initWithAttachmentProtos:(NSArray<SSKProtoAttachmentPointer *> *)attachmentProtos
-//                          networkManager:(TSNetworkManager *)networkManager
-//                             transaction:(YapDatabaseReadWriteTransaction *)transaction
-//{
-//    self = [super init];
-//    if (!self) {
-//        return self;
-//    }
-//
-//    _networkManager = networkManager;
-//
-//    NSMutableArray<NSString *> *attachmentIds = [NSMutableArray new];
-//    NSMutableArray<TSAttachmentPointer *> *attachmentPointers = [NSMutableArray new];
-//
-//    for (SSKProtoAttachmentPointer *attachmentProto in attachmentProtos) {
-//        TSAttachmentPointer *_Nullable pointer = [TSAttachmentPointer attachmentPointerFromProto:attachmentProto];
-//        if (!pointer) {
-//            OWSFailDebug(@"Invalid attachment.");
-//            continue;
-//        }
-//
-//        [attachmentIds addObject:pointer.uniqueId];
-//        [pointer saveWithTransaction:transaction];
-//        [attachmentPointers addObject:pointer];
-//    }
-//
-//    _attachmentIds = [attachmentIds copy];
-//    _attachmentPointers = [attachmentPointers copy];
-//
-//    return self;
-//}
-
 #pragma mark -
 
-- (NSArray<NSString *> *)saveAttachmentsPointersForMessage:(TSMessage *)message
-                                          attachmentProtos:(NSArray<SSKProtoAttachmentPointer *> *)attachmentProtos
-                                               transaction:(YapDatabaseReadWriteTransaction *)transaction
+- (NSArray<NSString *> *)attachmentsIdsForAttachments:(NSArray<TSAttachment *> *)attachments
 {
-    OWSAssertDebug(message);
-    OWSAssertDebug(transaction);
+    OWSAssertDebug(attachments);
 
     NSMutableArray<NSString *> *attachmentIds = [NSMutableArray new];
+    for (TSAttachment *attachment in attachments) {
+        [attachmentIds addObject:attachment.uniqueId];
+    }
+    return [attachmentIds copy];
+}
+
+- (NSArray<TSAttachmentPointer *> *)
+    saveAttachmentPointersForAttachmentProtos:(NSArray<SSKProtoAttachmentPointer *> *)attachmentProtos
+                                  transaction:(YapDatabaseReadWriteTransaction *)transaction
+{
+    OWSAssertDebug(transaction);
+
+    NSMutableArray<TSAttachmentPointer *> *attachmentPointers = [NSMutableArray new];
 
     for (SSKProtoAttachmentPointer *attachmentProto in attachmentProtos) {
         TSAttachmentPointer *_Nullable pointer = [TSAttachmentPointer attachmentPointerFromProto:attachmentProto];
@@ -181,17 +143,17 @@ typedef void (^AttachmentDownloadFailure)(NSError *error);
             continue;
         }
 
-        [attachmentIds addObject:pointer.uniqueId];
+        [attachmentPointers addObject:pointer];
         [pointer saveWithTransaction:transaction];
     }
 
-    return [attachmentIds copy];
+    return [attachmentPointers copy];
 }
 
 - (void)downloadAttachmentsForMessage:(TSMessage *)message
-                          transaction:(YapDatabaseReadWriteTransaction *)transaction
-                              success:(void (^)(NSArray<TSAttachmentStream *> *attachmentStreams))successHandler
-                              failure:(void (^)(NSError *error))failureHandler
+                          transaction:(YapDatabaseReadTransaction *)transaction
+                              success:(void (^)(NSArray<TSAttachmentStream *> *attachmentStreams))success
+                              failure:(void (^)(NSError *error))failure
 {
     OWSAssertDebug(transaction);
     OWSAssertDebug(message);
@@ -211,8 +173,46 @@ typedef void (^AttachmentDownloadFailure)(NSError *error);
         }
     }
 
+    [self enqueueJobsForAttachmentStreams:attachmentStreams
+                       attachmentPointers:attachmentPointers
+                                  message:message
+                                  success:success
+                                  failure:failure];
+}
+
+- (void)downloadAttachmentPointer:(TSAttachmentPointer *)attachmentPointer
+                          success:(void (^)(NSArray<TSAttachmentStream *> *attachmentStreams))success
+                          failure:(void (^)(NSError *error))failure
+{
+    OWSAssertDebug(attachmentPointer);
+
+    [self enqueueJobsForAttachmentStreams:@[]
+                       attachmentPointers:@[
+                           attachmentPointer,
+                       ]
+                                  message:nil
+                                  success:success
+                                  failure:failure];
+}
+
+- (void)enqueueJobsForAttachmentStreams:(NSArray<TSAttachmentStream *> *)attachmentStreamsParam
+                     attachmentPointers:(NSArray<TSAttachmentPointer *> *)attachmentPointers
+                                message:(nullable TSMessage *)message
+                                success:(void (^)(NSArray<TSAttachmentStream *> *attachmentStreams))successHandler
+                                failure:(void (^)(NSError *error))failureHandler
+{
+    OWSAssertDebug(attachmentStreamsParam);
+    OWSAssertDebug(attachmentPointers.count > 0);
+
     // To avoid deadlocks, synchronize on self outside of the transaction.
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        if (attachmentPointers.count < 1) {
+            OWSAssertDebug(attachmentStreamsParam.count > 0);
+            successHandler(attachmentStreamsParam);
+            return;
+        }
+
+        NSMutableArray<TSAttachmentStream *> *attachmentStreams = [attachmentStreamsParam mutableCopy];
         NSMutableArray<AnyPromise *> *promises = [NSMutableArray array];
         for (TSAttachmentPointer *attachmentPointer in attachmentPointers) {
             AnyPromise *promise = [AnyPromise promiseWithResolverBlock:^(PMKResolver resolve) {
@@ -244,10 +244,17 @@ typedef void (^AttachmentDownloadFailure)(NSError *error);
                           attachmentStreamsCopy = [attachmentStreams copy];
                       }
                       OWSLogInfo(@"Attachment downloads succeeded: %lu.", (unsigned long)attachmentStreamsCopy.count);
-                      successHandler(attachmentStreamsCopy);
+
+                      dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                          successHandler(attachmentStreamsCopy);
+                      });
                   })
                   .catch(^(NSError *error) {
-                      failureHandler(error);
+                      OWSLogError(@"Attachment downloads failed.");
+
+                      dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                          failureHandler(error);
+                      });
                   });
         [completionPromise retainUntilComplete];
     });
