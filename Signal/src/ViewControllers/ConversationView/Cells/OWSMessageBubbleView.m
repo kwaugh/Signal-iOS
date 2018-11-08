@@ -775,6 +775,7 @@ const UIDataDetectorTypes kOWSAllowedDataDetectorTypes
         [albumView unloadMedia];
     };
 
+    // Only apply "inner shadow" for single media, not albums.
     if (albumView.itemViews.count == 1) {
         UIView *itemView = albumView.itemViews.firstObject;
         OWSBubbleShapeView *innerShadowView = [[OWSBubbleShapeView alloc]
@@ -975,6 +976,7 @@ const UIDataDetectorTypes kOWSAllowedDataDetectorTypes
                                                                    items:self.viewItem.mediaAlbumItems];
 
             if (self.viewItem.mediaAlbumItems.count == 1) {
+                // Honor the content aspect ratio for single media.
                 ConversationMediaAlbumItem *mediaAlbumItem = self.viewItem.mediaAlbumItems.firstObject;
                 if (mediaAlbumItem.attachmentStream && mediaAlbumItem.mediaSize.width > 0
                     && mediaAlbumItem.mediaSize.height > 0) {
