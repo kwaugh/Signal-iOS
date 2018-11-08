@@ -24,6 +24,8 @@ extern NSString *const kAttachmentDownloadAttachmentIDKey;
  */
 @interface OWSAttachmentDownloads : NSObject
 
+- (nullable NSNumber *)downloadProgressForAttachmentId:(NSString *)attachmentId;
+
 - (NSArray<NSString *> *)attachmentsIdsForAttachments:(NSArray<TSAttachment *> *)attachments;
 
 - (NSArray<TSAttachmentPointer *> *)
